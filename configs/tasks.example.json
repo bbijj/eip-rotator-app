@@ -1,0 +1,10 @@
+[
+  {
+    "public_key": "UCLOUD_PUBLIC_KEY",
+    "private_key": "UCLOUD_PRIVATE_KEY",
+    "project_ids": ["org-xxxx", "org-yyyy"],
+    "region": "cn-bj2",
+    "interval_sec": 600
+  }
+]
+
