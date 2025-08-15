@@ -151,14 +151,15 @@ func rotateOnceForRegion(task taskConfig, credential *auth.Credential, region st
 
 	// Step 1: list all uhosts with bound eip per project
 	type hostBinding struct {
-		ProjectID    string
-		UHostID      string
-		UHostName    string
-		EIPID        string
-		EIPBandwidth int
-		EIPPayMode   string
-		EIPOperator  string
-		Region       string
+		ProjectID     string
+		UHostID       string
+		UHostName     string
+		EIPID         string
+		EIPBandwidth  int
+		EIPPayMode    string
+		EIPOperator   string
+		EIPChargeType string
+		Region        string
 	}
 	var bindings []hostBinding
 
@@ -187,15 +188,17 @@ func rotateOnceForRegion(task taskConfig, credential *auth.Credential, region st
 				op = e.EIPAddr[0].OperatorName
 			}
 			pay := e.PayMode
+			charge := e.ChargeType
 			bindings = append(bindings, hostBinding{
-				ProjectID:    project,
-				UHostID:      e.Resource.ResourceID,
-				UHostName:    e.Resource.ResourceName,
-				EIPID:        e.EIPId,
-				EIPBandwidth: bw,
-				EIPPayMode:   pay,
-				EIPOperator:  op,
-				Region:       region,
+				ProjectID:     project,
+				UHostID:       e.Resource.ResourceID,
+				UHostName:     e.Resource.ResourceName,
+				EIPID:         e.EIPId,
+				EIPBandwidth:  bw,
+				EIPPayMode:    pay,
+				EIPOperator:   op,
+				EIPChargeType: charge,
+				Region:        region,
 			})
 		}
 	}
@@ -215,6 +218,12 @@ func rotateOnceForRegion(task taskConfig, credential *auth.Credential, region st
 		allocReq.OperatorName = ucloud.String(b.EIPOperator)
 		allocReq.Bandwidth = ucloud.Int(b.EIPBandwidth)
 		allocReq.PayMode = ucloud.String(b.EIPPayMode)
+		allocReq.ChargeType = ucloud.String(b.EIPChargeType)
+		// 对于按年/按月付费，设置购买时长为1（1年或1个月）
+		if b.EIPChargeType == "Year" || b.EIPChargeType == "Month" {
+			allocReq.Quantity = ucloud.Int(1)
+		}
+		// 计费方式已设置为与旧EIP一致：ChargeType(付费方式)和PayMode(计费模式)
 		allocResp, err := unetClient.AllocateEIP(allocReq)
 		if err != nil {
 			return fmt.Errorf("AllocateEIP: region=%s host=%s(%s): %w", b.Region, safeName(b.UHostName), b.UHostID, err)
@@ -344,7 +353,7 @@ func runScheduler(configPath string) {
 			logger.Fatalf("empty tasks in config")
 		}
 		for _, t := range tasks {
-			if t.PublicKey == "" || t.PrivateKey == "" || len(t.Projects) == 0 || t.Region == "" {
+			if t.PublicKey == "" || t.PrivateKey == "" || len(t.Projects) == 0 {
 				logger.Fatalf("invalid task: %+v", t)
 			}
 		}
@@ -376,16 +385,28 @@ func runScheduler(configPath string) {
 func startTask(t taskConfig, logger *log.Logger) runner {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		if err := rotateOnce(t); err != nil {
-			logger.Printf("task initial run failed: %v", err)
+		logger.Printf("task run start: region=%s interval=%ds projects=%v", t.Region, t.Interval, t.Projects)
+		start := time.Now()
+		err := rotateOnce(t)
+		dur := time.Since(start)
+		if err != nil {
+			logger.Printf("task run end: region=%s interval=%ds took=%s error=%v", t.Region, t.Interval, dur, err)
+		} else {
+			logger.Printf("task run end: region=%s interval=%ds took=%s", t.Region, t.Interval, dur)
 		}
 		ticker := time.NewTicker(time.Duration(t.Interval) * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				if err := rotateOnce(t); err != nil {
-					logger.Printf("task run failed: %v", err)
+				logger.Printf("task run start: region=%s interval=%ds projects=%v", t.Region, t.Interval, t.Projects)
+				start := time.Now()
+				err := rotateOnce(t)
+				dur := time.Since(start)
+				if err != nil {
+					logger.Printf("task run end: region=%s interval=%ds took=%s error=%v", t.Region, t.Interval, dur, err)
+				} else {
+					logger.Printf("task run end: region=%s interval=%ds took=%s", t.Region, t.Interval, dur)
 				}
 			case <-ctx.Done():
 				return

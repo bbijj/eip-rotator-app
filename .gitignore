@@ -1,0 +1,40 @@
+# Go build artifacts
+bin/
+out/
+dist/
+coverage/
+coverage.out
+*.coverprofile
+*.test
+
+# Binaries
+eip-rotator
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editors/IDE
+.vscode/
+.idea/
+*.iml
+
+# Env/config
+.env
+.env.*
+configs/tasks.json
+
+# Docker/CI
+*.tar
+.cache/
